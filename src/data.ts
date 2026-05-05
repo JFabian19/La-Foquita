@@ -13,12 +13,12 @@ export const initialData = {
     {
       "categoria": "Ceviches",
       "items": [
-        { "id": "1", "nombre": "CEVICHE DE PESCADO", "precio": 30.00 },
-        { "id": "2", "nombre": "CEVICHE MIXTO", "precio": 40.00 },
-        { "id": "3", "nombre": "CEVICHE DE CONCHAS NEGRAS", "precio": 48.00 },
-        { "id": "4", "nombre": "CEVICHE LA FOQUITA", "precio": 45.00 },
-        { "id": "5", "nombre": "LECHE DE TIGRE", "precio": 20.00 },
-        { "id": "6", "nombre": "LECHE DE PANTERA", "precio": 30.00 }
+        { "id": "1", "nombre": "CEVICHE DE PESCADO", "precio": 30.00, "imagen": "/Ceviche de pescado.webp" },
+        { "id": "2", "nombre": "CEVICHE MIXTO", "precio": 40.00, "imagen": "/Ceviche mixto.webp" },
+        { "id": "3", "nombre": "CEVICHE DE CONCHAS NEGRAS", "precio": 48.00, "imagen": "/Ceviche de conchas negras.jpeg" },
+        { "id": "4", "nombre": "CEVICHE LA FOQUITA", "precio": 45.00, "imagen": "/Ceviche la foquita.jpeg" },
+        { "id": "5", "nombre": "LECHE DE TIGRE", "precio": 20.00, "imagen": "/Leche de tigre.jpeg" },
+        { "id": "6", "nombre": "LECHE DE PANTERA", "precio": 30.00, "imagen": "/Leche de pantera.webp" }
       ]
     },
     {

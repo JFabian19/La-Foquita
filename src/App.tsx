@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ShoppingCart, Plus, Minus, Trash2, X, MessageCircle, Image as ImageIcon, Anchor } from 'lucide-react';
+import { ShoppingCart, Plus, Minus, Trash2, X, MessageCircle, Image as ImageIcon, Anchor, MapPin } from 'lucide-react';
 import { initialData } from './data';
 import type { MenuData, MenuItem, CartItem } from './types';
 
@@ -9,6 +9,7 @@ function App() {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [activeCategory, setActiveCategory] = useState<string>(data.menu[0]?.categoria || '');
   const [isCartOpen, setIsCartOpen] = useState(false);
+  const [selectedItemForVariants, setSelectedItemForVariants] = useState<MenuItem | null>(null);
 
   const slogans = [
     "EL MEJOR SABOR DEL MAR",
@@ -40,6 +41,10 @@ function App() {
   }, [data.menu]);
 
   const addToCart = (item: MenuItem) => {
+    if (item.precios && Object.keys(item.precios).length > 0) {
+      setSelectedItemForVariants(item);
+      return;
+    }
     const price = item.precio || 0;
     setCart(prev => {
       const existing = prev.find(c => c.id === item.id);
@@ -50,14 +55,34 @@ function App() {
     });
   };
 
-  const updateQuantity = (id: string, delta: number) => {
-    setCart(prev => prev.map(c => {
-      if (c.id === id) {
-        const newQuant = c.cantidad + delta;
-        return newQuant > 0 ? { ...c, cantidad: newQuant } : c;
+  const addVariantToCart = (item: MenuItem, variantName: string, price: number) => {
+    const cartId = `${item.id}-${variantName}`;
+    setCart(prev => {
+      const existing = prev.find(c => c.id === cartId);
+      if (existing) {
+        return prev.map(c => c.id === cartId ? { ...c, cantidad: c.cantidad + 1 } : c);
       }
-      return c;
-    }));
+      return [...prev, { 
+        id: cartId, 
+        nombre: `${item.nombre} (${variantName.replace('_', ' ')})`, 
+        precio: price, 
+        cantidad: 1,
+        variante: variantName 
+      }];
+    });
+    setSelectedItemForVariants(null);
+  };
+
+  const updateQuantity = (id: string, delta: number) => {
+    setCart(prev => {
+      const updated = prev.map(c => {
+        if (c.id === id) {
+          return { ...c, cantidad: c.cantidad + delta };
+        }
+        return c;
+      });
+      return updated.filter(c => c.cantidad > 0);
+    });
   };
 
   const totalCart = cart.reduce((sum, item) => sum + item.precio * item.cantidad, 0);
@@ -111,8 +136,18 @@ function App() {
       </div>
 
       {/* Header */}
-      <header className="fixed top-0 w-full z-50 bg-white/80 backdrop-blur-md shadow-sm border-b border-gray-100 flex justify-center items-center px-4 py-3 h-[60px]">
+      <header className="fixed top-0 w-full z-50 bg-white/80 backdrop-blur-md shadow-sm border-b border-gray-100 flex justify-between items-center px-4 py-3 h-[60px]">
+        <div className="w-10"></div> {/* Spacer to keep title centered if needed, but justify-between is fine */}
         <h1 className="text-xl font-display text-secondary font-bold">{data.informacion_restaurante.nombre}</h1>
+        <a 
+          href="https://maps.app.goo.gl/YGaXjNZi2EMQZuMi6" 
+          target="_blank" 
+          rel="noopener noreferrer"
+          className="bg-red-50 text-red-500 p-2 rounded-full hover:bg-red-100 transition-all shadow-sm"
+          title="Ubícanos en Google Maps"
+        >
+          <MapPin size={20} />
+        </a>
       </header>
 
       {/* Infinity Marquee */}
@@ -205,7 +240,7 @@ function App() {
                     </h3>
                     
                     {item.descripcion && (
-                      <p className="text-[10px] md:text-xs text-textMuted mb-2 line-clamp-2">{item.descripcion}</p>
+                      <p className="text-[10px] md:text-xs text-textMuted mb-2">{item.descripcion}</p>
                     )}
 
                     <div className="flex justify-between items-end mt-auto">
@@ -239,6 +274,35 @@ function App() {
             </div>
           </section>
         ))}
+        {/* Google Maps Section */}
+        <section className="mt-16 bg-white rounded-[2rem] p-6 shadow-soft border border-gray-100">
+          <h2 className="text-2xl font-display text-secondary font-bold mb-6 flex items-center gap-3">
+            <MapPin className="text-primary" />
+            Ubícanos en Google Maps
+          </h2>
+          <div className="rounded-2xl overflow-hidden shadow-inner border border-gray-100">
+            <iframe 
+              src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3010697.415219753!2d-74.41976289790253!3d-16.81573718110197!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x9140197f832e4b7d%3A0xbef32ceb11452a7b!2sCEVICHERIA%20%22LA%20FOQUITA%22!5e0!3m2!1ses!2spe!4v1777942013503!5m2!1ses!2spe" 
+              width="100%" 
+              height="400" 
+              style={{ border: 0 }} 
+              allowFullScreen={true} 
+              loading="lazy" 
+              referrerPolicy="no-referrer-when-downgrade"
+            ></iframe>
+          </div>
+          <div className="mt-4 text-center">
+            <a 
+              href="https://maps.app.goo.gl/YGaXjNZi2EMQZuMi6" 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 text-secondary font-bold hover:text-primary transition-colors"
+            >
+              <MapPin size={18} />
+              Abrir en Google Maps
+            </a>
+          </div>
+        </section>
       </main>
 
       {/* Floating Action Button (Ver Pedido) */}
@@ -326,6 +390,49 @@ function App() {
                   </button>
                 </div>
               )}
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Variant Selection Modal */}
+      <AnimatePresence>
+        {selectedItemForVariants && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[60] bg-secondary/40 backdrop-blur-sm flex items-center justify-center p-4"
+          >
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="bg-white w-full max-w-sm rounded-3xl shadow-2xl overflow-hidden"
+            >
+              <div className="p-6">
+                <div className="flex justify-between items-center mb-6">
+                  <h3 className="text-xl font-display font-bold text-secondary">Seleccionar Tamaño</h3>
+                  <button onClick={() => setSelectedItemForVariants(null)} className="p-2 bg-gray-100 rounded-full">
+                    <X size={20} />
+                  </button>
+                </div>
+                <p className="text-secondary font-bold mb-4">{selectedItemForVariants.nombre}</p>
+                <div className="space-y-3">
+                  {Object.entries(selectedItemForVariants.precios || {}).map(([name, price]) => (
+                    <button
+                      key={name}
+                      onClick={() => addVariantToCart(selectedItemForVariants, name, price)}
+                      className="w-full flex justify-between items-center p-4 bg-gray-50 hover:bg-primary/10 border border-gray-100 rounded-2xl transition-all group"
+                    >
+                      <span className="font-bold text-secondary capitalize group-hover:text-secondary">
+                        {name.replace('_', ' ')}
+                      </span>
+                      <span className="font-bold text-primary">S/ {price.toFixed(2)}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
             </motion.div>
           </motion.div>
         )}
