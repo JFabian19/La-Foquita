@@ -1,13 +1,64 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ShoppingCart, Plus, Minus, Trash2, X, MessageCircle, Image as ImageIcon, Anchor, MapPin } from 'lucide-react';
+import { ShoppingCart, Plus, Minus, Trash2, X, MessageCircle, Image as ImageIcon, Anchor, MapPin, Loader2 } from 'lucide-react';
 import { initialData } from './data';
-import type { MenuData, MenuItem, CartItem } from './types';
+import type { MenuData, MenuItem, CartItem, MenuCategory } from './types';
+
+const SHEET_ID = '1qLvOrUI-MlDYhfLt6GrnGbw2cGz75ka2fOM0v31335A';
+const PLATOS_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=Platos`;
+const CATEGORIAS_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=Categor%C3%ADas`;
+
+// Helper to parse CSV properly (handling quotes)
+const parseCSV = (csvText: string) => {
+  const lines: string[][] = [];
+  let currentLine: string[] = [];
+  let currentField = '';
+  let inQuotes = false;
+
+  for (let i = 0; i < csvText.length; i++) {
+    const char = csvText[i];
+    const nextChar = csvText[i + 1];
+
+    if (inQuotes) {
+      if (char === '"' && nextChar === '"') {
+        currentField += '"';
+        i++;
+      } else if (char === '"') {
+        inQuotes = false;
+      } else {
+        currentField += char;
+      }
+    } else {
+      if (char === '"') {
+        inQuotes = true;
+      } else if (char === ',') {
+        currentLine.push(currentField.trim());
+        currentField = '';
+      } else if (char === '\n' || char === '\r') {
+        if (currentField || currentLine.length > 0) {
+          currentLine.push(currentField.trim());
+          lines.push(currentLine);
+          currentLine = [];
+          currentField = '';
+        }
+        if (char === '\r' && nextChar === '\n') i++;
+      } else {
+        currentField += char;
+      }
+    }
+  }
+  if (currentField || currentLine.length > 0) {
+    currentLine.push(currentField.trim());
+    lines.push(currentLine);
+  }
+  return lines;
+};
 
 function App() {
-  const [data] = useState<MenuData>(initialData);
+  const [data, setData] = useState<MenuData>(initialData);
+  const [loading, setLoading] = useState(true);
   const [cart, setCart] = useState<CartItem[]>([]);
-  const [activeCategory, setActiveCategory] = useState<string>(data.menu[0]?.categoria || '');
+  const [activeCategory, setActiveCategory] = useState<string>('');
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [selectedItemForVariants, setSelectedItemForVariants] = useState<MenuItem | null>(null);
 
@@ -19,8 +70,82 @@ function App() {
     "LA MEJOR EXPERIENCIA MARINA"
   ];
 
+  // Fetch data from Google Sheets
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const [catRes, dishRes] = await Promise.all([
+          fetch(CATEGORIAS_URL),
+          fetch(PLATOS_URL)
+        ]);
+
+        const catText = await catRes.text();
+        const dishText = await dishRes.text();
+
+        const catData = parseCSV(catText).slice(1); // Remove header
+        const dishData = parseCSV(dishText).slice(1); // Remove header
+
+        // Process Categories
+        const categories = catData.map(row => row[0]).filter(Boolean);
+
+        // Map local images from initialData for fallback
+        const localImageMap: Record<string, string> = {};
+        initialData.menu.forEach(cat => {
+          cat.items.forEach(item => {
+            if (item.imagen) {
+              localImageMap[item.nombre.toLowerCase().trim()] = item.imagen;
+            }
+          });
+        });
+
+        // Build Menu Structure
+        const menu: MenuCategory[] = categories.map(catName => {
+          const items: MenuItem[] = dishData
+            .filter(row => row[0] === catName)
+            .map((row, idx) => {
+              const nombre = row[1];
+              const descripcion = row[2];
+              const precio = row[3] ? parseFloat(row[3]) : null;
+              const imagenUrl = row[4];
+              
+              // Local image fallback logic
+              const localImage = localImageMap[nombre.toLowerCase().trim()];
+              const finalImage = imagenUrl || localImage;
+
+              return {
+                id: `${catName}-${idx}`,
+                nombre,
+                descripcion,
+                precio,
+                imagen: finalImage
+              };
+            });
+          
+          return {
+            categoria: catName,
+            items
+          };
+        });
+
+        setData(prev => ({
+          ...prev,
+          menu
+        }));
+        if (categories.length > 0) setActiveCategory(categories[0]);
+      } catch (error) {
+        console.error("Error fetching sheet data:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, []);
+
   // Intersection Observer for scrollspy
   useEffect(() => {
+    if (loading) return;
+    
     const observer = new IntersectionObserver(
       (entries) => {
         entries.forEach((entry) => {
@@ -38,7 +163,7 @@ function App() {
     });
 
     return () => observer.disconnect();
-  }, [data.menu]);
+  }, [data.menu, loading]);
 
   const addToCart = (item: MenuItem) => {
     if (item.precios && Object.keys(item.precios).length > 0) {
@@ -98,59 +223,62 @@ function App() {
   const scrollToCategory = (categoryId: string) => {
     const element = document.getElementById(categoryId);
     if (element) {
-      const y = element.getBoundingClientRect().top + window.scrollY - 130; // 130px offset for fixed header
+      const y = element.getBoundingClientRect().top + window.scrollY - 130;
       window.scrollTo({ top: y, behavior: 'smooth' });
     }
   };
 
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-[#F5F5F0] flex flex-col items-center justify-center p-4">
+        <motion.div
+          animate={{ 
+            scale: [1, 1.1, 1],
+            rotate: [0, 5, -5, 0]
+          }}
+          transition={{ duration: 2, repeat: Infinity }}
+          className="relative mb-8"
+        >
+          <div className="absolute inset-0 bg-primary/20 rounded-full blur-2xl animate-pulse"></div>
+          <Anchor size={80} className="text-secondary relative z-10" />
+        </motion.div>
+        <h2 className="text-2xl font-display font-bold text-secondary mb-2">Cargando Menú...</h2>
+        <p className="text-textMuted animate-pulse flex items-center gap-2">
+          <Loader2 className="animate-spin" size={16} />
+          Preparando los mejores sabores para ti
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-background pb-24 relative">
-      {/* Aurora-like Background Blobs */}
       <div className="fixed inset-0 -z-10 overflow-hidden pointer-events-none bg-[#F5F5F0]">
         <motion.div
-          animate={{
-            x: [0, 100, 0],
-            y: [0, 50, 0],
-            scale: [1, 1.2, 1],
-          }}
+          animate={{ x: [0, 100, 0], y: [0, 50, 0], scale: [1, 1.2, 1] }}
           transition={{ duration: 20, repeat: Infinity, ease: "linear" }}
           className="absolute -top-[20%] -left-[10%] w-[70%] h-[70%] bg-secondary/20 rounded-full blur-[130px]"
         />
         <motion.div
-          animate={{
-            x: [0, -120, 0],
-            y: [0, 150, 0],
-            scale: [1, 1.3, 1],
-          }}
+          animate={{ x: [0, -120, 0], y: [0, 150, 0], scale: [1, 1.3, 1] }}
           transition={{ duration: 25, repeat: Infinity, ease: "linear" }}
           className="absolute top-[10%] -right-[20%] w-[60%] h-[80%] bg-secondary/15 rounded-full blur-[110px]"
         />
-        <motion.div
-          animate={{
-            x: [0, 100, 0],
-            y: [0, -150, 0],
-          }}
-          transition={{ duration: 18, repeat: Infinity, ease: "linear" }}
-          className="absolute -bottom-[20%] left-[10%] w-[80%] h-[60%] bg-secondary/10 rounded-full blur-[140px]"
-        />
       </div>
 
-      {/* Header */}
       <header className="fixed top-0 w-full z-50 bg-white/80 backdrop-blur-md shadow-sm border-b border-gray-100 flex justify-between items-center px-4 py-3 h-[60px]">
-        <div className="w-10"></div> {/* Spacer to keep title centered if needed, but justify-between is fine */}
+        <div className="w-10"></div>
         <h1 className="text-xl font-display text-secondary font-bold">{data.informacion_restaurante.nombre}</h1>
         <a 
           href="https://maps.app.goo.gl/YGaXjNZi2EMQZuMi6" 
           target="_blank" 
           rel="noopener noreferrer"
           className="bg-red-50 text-red-500 p-2 rounded-full hover:bg-red-100 transition-all shadow-sm"
-          title="Ubícanos en Google Maps"
         >
           <MapPin size={20} />
         </a>
       </header>
 
-      {/* Infinity Marquee */}
       <div className="mt-[60px] bg-secondary overflow-hidden py-2 border-y border-white/10">
         <motion.div
           animate={{ x: ["0%", "-50%"] }}
@@ -161,9 +289,7 @@ function App() {
             <div key={i} className="flex items-center space-x-8 px-4">
               {slogans.map((slogan, idx) => (
                 <div key={idx} className="flex items-center space-x-8">
-                  <span className="text-white font-sans font-bold text-xs tracking-widest uppercase">
-                    {slogan}
-                  </span>
+                  <span className="text-white font-sans font-bold text-xs tracking-widest uppercase">{slogan}</span>
                   <span className="text-primary">★</span>
                 </div>
               ))}
@@ -172,16 +298,10 @@ function App() {
         </motion.div>
       </div>
 
-      {/* Hero Section */}
       <section className="w-full">
-        <img 
-          src="/baner.png" 
-          alt="La Foquita" 
-          className="w-full h-auto block shadow-lg" 
-        />
+        <img src="/baner.webp" alt="La Foquita" className="w-full h-auto block shadow-lg" />
       </section>
 
-      {/* Sticky Categories Bar */}
       <div className="sticky top-[60px] z-40 bg-background/95 backdrop-blur-sm border-b border-gray-200 py-3 shadow-sm">
         <div className="flex overflow-x-auto hide-scrollbar space-x-3 px-4 max-w-6xl mx-auto snap-x">
           {data.menu.map(cat => (
@@ -200,7 +320,6 @@ function App() {
         </div>
       </div>
 
-      {/* Main Content - All Categories Displayed */}
       <main className="max-w-6xl mx-auto px-4 py-8 space-y-12">
         {data.menu.map((category) => (
           <section key={category.categoria} id={category.categoria} className="scroll-mt-[130px]">
@@ -250,15 +369,6 @@ function App() {
                             S/.{item.precio.toFixed(2)}
                           </span>
                         )}
-                        {item.precios && (
-                          <div className="text-xs text-textMuted">
-                            {Object.entries(item.precios).map(([k, v]) => (
-                               <div key={k}>
-                                 <span className="capitalize">{k.replace('_', ' ')}:</span> S/.{v.toFixed(2)}
-                               </div>
-                            ))}
-                          </div>
-                        )}
                       </div>
 
                       <button 
@@ -274,7 +384,7 @@ function App() {
             </div>
           </section>
         ))}
-        {/* Google Maps Section */}
+        
         <section className="mt-16 bg-white rounded-[2rem] p-6 shadow-soft border border-gray-100">
           <h2 className="text-2xl font-display text-secondary font-bold mb-6 flex items-center gap-3">
             <MapPin className="text-primary" />
@@ -283,29 +393,12 @@ function App() {
           <div className="rounded-2xl overflow-hidden shadow-inner border border-gray-100">
             <iframe 
               src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3010697.415219753!2d-74.41976289790253!3d-16.81573718110197!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x9140197f832e4b7d%3A0xbef32ceb11452a7b!2sCEVICHERIA%20%22LA%20FOQUITA%22!5e0!3m2!1ses!2spe!4v1777942013503!5m2!1ses!2spe" 
-              width="100%" 
-              height="400" 
-              style={{ border: 0 }} 
-              allowFullScreen={true} 
-              loading="lazy" 
-              referrerPolicy="no-referrer-when-downgrade"
+              width="100%" height="400" style={{ border: 0 }} allowFullScreen={true} loading="lazy" referrerPolicy="no-referrer-when-downgrade"
             ></iframe>
-          </div>
-          <div className="mt-4 text-center">
-            <a 
-              href="https://maps.app.goo.gl/YGaXjNZi2EMQZuMi6" 
-              target="_blank" 
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 text-secondary font-bold hover:text-primary transition-colors"
-            >
-              <MapPin size={18} />
-              Abrir en Google Maps
-            </a>
           </div>
         </section>
       </main>
 
-      {/* Floating Action Button (Ver Pedido) */}
       <AnimatePresence>
         {cart.length > 0 && !isCartOpen && (
           <motion.div 
@@ -325,7 +418,6 @@ function App() {
         )}
       </AnimatePresence>
 
-      {/* Cart Modal with Blur Background */}
       <AnimatePresence>
         {isCartOpen && (
           <motion.div 
@@ -341,7 +433,6 @@ function App() {
               transition={{ type: "spring", bounce: 0, duration: 0.4 }}
               className="bg-white w-full sm:max-w-md rounded-t-3xl sm:rounded-2xl shadow-2xl flex flex-col max-h-[85vh]"
             >
-              {/* Modal Header */}
               <div className="flex justify-between items-center p-5 border-b border-gray-100">
                 <h3 className="font-display text-2xl font-bold text-secondary">Tu Pedido</h3>
                 <button onClick={() => setIsCartOpen(false)} className="p-2 bg-gray-100 text-gray-500 rounded-full hover:bg-gray-200">
@@ -349,7 +440,6 @@ function App() {
                 </button>
               </div>
 
-              {/* Items List */}
               <div className="p-5 overflow-y-auto flex-grow space-y-4">
                 {cart.length === 0 ? (
                   <p className="text-center text-gray-500 py-10">Tu carrito está vacío</p>
@@ -374,7 +464,6 @@ function App() {
                 )}
               </div>
 
-              {/* Footer / Checkout */}
               {cart.length > 0 && (
                 <div className="p-5 bg-white border-t border-gray-100 shadow-[0_-10px_40px_-10px_rgba(0,0,0,0.05)] rounded-b-2xl">
                   <div className="flex justify-between items-center mb-4">
@@ -390,49 +479,6 @@ function App() {
                   </button>
                 </div>
               )}
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Variant Selection Modal */}
-      <AnimatePresence>
-        {selectedItemForVariants && (
-          <motion.div 
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[60] bg-secondary/40 backdrop-blur-sm flex items-center justify-center p-4"
-          >
-            <motion.div 
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.9, opacity: 0 }}
-              className="bg-white w-full max-w-sm rounded-3xl shadow-2xl overflow-hidden"
-            >
-              <div className="p-6">
-                <div className="flex justify-between items-center mb-6">
-                  <h3 className="text-xl font-display font-bold text-secondary">Seleccionar Tamaño</h3>
-                  <button onClick={() => setSelectedItemForVariants(null)} className="p-2 bg-gray-100 rounded-full">
-                    <X size={20} />
-                  </button>
-                </div>
-                <p className="text-secondary font-bold mb-4">{selectedItemForVariants.nombre}</p>
-                <div className="space-y-3">
-                  {Object.entries(selectedItemForVariants.precios || {}).map(([name, price]) => (
-                    <button
-                      key={name}
-                      onClick={() => addVariantToCart(selectedItemForVariants, name, price)}
-                      className="w-full flex justify-between items-center p-4 bg-gray-50 hover:bg-primary/10 border border-gray-100 rounded-2xl transition-all group"
-                    >
-                      <span className="font-bold text-secondary capitalize group-hover:text-secondary">
-                        {name.replace('_', ' ')}
-                      </span>
-                      <span className="font-bold text-primary">S/ {price.toFixed(2)}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
             </motion.div>
           </motion.div>
         )}
