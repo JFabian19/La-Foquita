@@ -60,7 +60,6 @@ function App() {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [activeCategory, setActiveCategory] = useState<string>('');
   const [isCartOpen, setIsCartOpen] = useState(false);
-  const [selectedItemForVariants, setSelectedItemForVariants] = useState<MenuItem | null>(null);
 
   const slogans = [
     "EL MEJOR SABOR DEL MAR",
@@ -166,10 +165,6 @@ function App() {
   }, [data.menu, loading]);
 
   const addToCart = (item: MenuItem) => {
-    if (item.precios && Object.keys(item.precios).length > 0) {
-      setSelectedItemForVariants(item);
-      return;
-    }
     const price = item.precio || 0;
     setCart(prev => {
       const existing = prev.find(c => c.id === item.id);
@@ -178,24 +173,6 @@ function App() {
       }
       return [...prev, { id: item.id, nombre: item.nombre, precio: price, cantidad: 1 }];
     });
-  };
-
-  const addVariantToCart = (item: MenuItem, variantName: string, price: number) => {
-    const cartId = `${item.id}-${variantName}`;
-    setCart(prev => {
-      const existing = prev.find(c => c.id === cartId);
-      if (existing) {
-        return prev.map(c => c.id === cartId ? { ...c, cantidad: c.cantidad + 1 } : c);
-      }
-      return [...prev, { 
-        id: cartId, 
-        nombre: `${item.nombre} (${variantName.replace('_', ' ')})`, 
-        precio: price, 
-        cantidad: 1,
-        variante: variantName 
-      }];
-    });
-    setSelectedItemForVariants(null);
   };
 
   const updateQuantity = (id: string, delta: number) => {
